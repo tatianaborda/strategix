@@ -1,16 +1,25 @@
+import Button from './ui/Button';
+
 export default function Hero() {
   return (
-    <div>
-      <h2 className="text-4xl font-bold mb-4 leading-tight">
-        Automate your <br />
-        limit orders
-      </h2>
-      <p className="text-lg mb-6 text-white/70">
+  <div className="flex-1 flex items-center px-6 relative z-10">
+    <div className="max-w-2xl">
+      <h1 className="text-6xl font-bold text-white mb-6 leading-tight">
+        <span className="bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent">
+          Automate your
+        </span>
+        <br />
+        <span className="bg-gradient-to-r from-cyan-300 to-purple-400 bg-clip-text text-transparent">
+          limit orders
+        </span>
+      </h1>
+      <p className="text-xl text-slate-300 mb-8 leading-relaxed">
         A simple tool to create limit order strategies
       </p>
-      <button className="bg-cyan-400 text-black font-semibold py-2 px-5 rounded-xl hover:bg-cyan-300 transition">
+      <Button className="text-lg px-8 py-4">
         Start Now
-      </button>
+      </Button>
     </div>
-  );
+  </div>
+);
 }
