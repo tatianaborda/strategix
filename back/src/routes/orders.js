@@ -1,9 +1,10 @@
-
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
 const Strategy = require('../models/Strategy');
-const oneInchService = require('../services/oneInchService');
+const orderController = require('../controllers/orderController');
+const { validateOrder } = require('../middleware/validators/orderValidator');
+const { executeOrderOnChain } = require('../services/limitOrderService');
 
 // GET /api/orders - Obtener todas las órdenes (con filtros)
 router.get('/', async (req, res) => {
@@ -95,7 +96,7 @@ router.get('/strategy/:strategyId', async (req, res) => {
     const orders = await Order.find(filter)
       .sort({ timestamp: -1 });
 
-    // Calcular estadísticas de la estrategia
+    // strategy stats
     const stats = {
       total: orders.length,
       executed: orders.filter(o => o.status === 'EXECUTED').length,
@@ -122,47 +123,52 @@ router.get('/strategy/:strategyId', async (req, res) => {
   }
 });
 
-// GET /api/orders/user/:userAddress - Obtener órdenes de un usuario
+// GET /api/orders/user/:userAddress
 router.get('/user/:userAddress', async (req, res) => {
   try {
     const { userAddress } = req.params;
     const { status, days = 30 } = req.query;
 
-    // Filtrar por fecha (últimos X días)
     const dateFilter = new Date();
     dateFilter.setDate(dateFilter.getDate() - parseInt(days));
 
-    const filter = { 
-      userAddress: userAddress.toLowerCase(),
-      timestamp: { $gte: dateFilter }
+    // Buscar órdenes por estrategias del usuario usando Sequelize
+    const { Strategy } = require('../models');
+    
+    const whereClause = {
+      created_at: { [Op.gte]: dateFilter }
     };
     
-    if (status) filter.status = status;
+    if (status) whereClause.status = status.toUpperCase();
 
-    const orders = await Order.find(filter)
-      .populate('strategyId', 'name type tokens')
-      .sort({ timestamp: -1 });
+    const orders = await Order.findAll({
+      where: whereClause,
+      include: [{
+        model: Strategy,
+        as: 'strategy',
+        where: { 
+          userAddress: userAddress.toLowerCase() 
+        },
+        attributes: ['id', 'name', 'type', 'tokens']
+      }],
+      order: [['created_at', 'DESC']]
+    });
 
-    // También obtener órdenes activas de 1inch
-    let oneInchOrders = [];
-    try {
-      oneInchOrders = await oneInchService.getUserOrders(userAddress);
-    } catch (error) {
-      console.warn('Could not fetch 1inch orders:', error.message);
-    }
+    // stats
+    const summary = {
+      total: orders.length,
+      executed: orders.filter(o => o.status === 'FILLED').length,
+      failed: orders.filter(o => o.status === 'FAILED').length,
+      pending: orders.filter(o => o.status === 'PENDING').length,
+      cancelled: orders.filter(o => o.status === 'CANCELLED').length
+    };
 
     res.json({
       success: true,
       message: 'Órdenes de usuario obtenidas exitosamente',
       data: {
-        localOrders: orders,
-        oneInchOrders: oneInchOrders,
-        summary: {
-          totalLocal: orders.length,
-          totalOneInch: oneInchOrders.length,
-          executed: orders.filter(o => o.status === 'EXECUTED').length,
-          failed: orders.filter(o => o.status === 'FAILED').length
-        }
+        orders: orders,
+        summary: summary
       }
     });
   } catch (error) {
@@ -175,77 +181,19 @@ router.get('/user/:userAddress', async (req, res) => {
   }
 });
 
-// POST /api/orders/manual - Crear orden manual (bypass strategy)
-router.post('/manual', async (req, res) => {
-  try {
-    const {
-      userAddress,
-      makerAsset,
-      takerAsset,
-      makingAmount,
-      takingAmount,
-      conditions = {}
-    } = req.body;
+//POST MANUAL- WIP
+router.post('/manual', validateOrder, orderController.createManualOrder);
 
-    // Validaciones básicas
-    if (!userAddress || !makerAsset || !takerAsset || !makingAmount || !takingAmount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Faltan campos requeridos'
-      });
-    }
-
-    // Crear orden directamente con 1inch
-    const orderParams = {
-      makerAsset,
-      takerAsset,
-      makingAmount,
-      takingAmount,
-      maker: userAddress,
-      predicate: conditions.predicate || '0x'
-    };
-
-    const limitOrder = await oneInchService.createLimitOrder(orderParams);
-
-    // Guardar en base de datos
-    const order = new Order({
-      strategyId: null, // Orden manual
-      userAddress,
-      orderData: limitOrder,
-      status: 'CREATED',
-      executionPrice: null,
-      timestamp: new Date(),
-      isManual: true
-    });
-
-    await order.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Orden manual creada exitosamente',
-      data: {
-        order,
-        limitOrder,
-        requiresSigning: true
-      }
-    });
-  } catch (error) {
-    console.error('Error al crear orden manual:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al crear orden manual',
-      error: error.message
-    });
-  }
-});
-
-// PUT /api/orders/:id/cancel - Cancelar orden
+// PUT /api/orders/:id/cancel for SEQUELIZE
 router.put('/:id/cancel', async (req, res) => {
   try {
     const { id } = req.params;
-    const { signature, userAddress } = req.body;
+    const { userAddress } = req.body;
 
-    const order = await Order.findById(id);
+    const order = await Order.findByPk(id, {
+      include: [{ model: Strategy, as: 'strategy' }]
+    });
+    
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -253,27 +201,19 @@ router.put('/:id/cancel', async (req, res) => {
       });
     }
 
-    // Verificar que el usuario sea el propietario
-    if (order.userAddress && order.userAddress.toLowerCase() !== userAddress.toLowerCase()) {
+    // Verificar propietario usando la estrategia asociada
+    if (order.strategy && order.strategy.userAddress && 
+        order.strategy.userAddress.toLowerCase() !== userAddress.toLowerCase()) {
       return res.status(403).json({
         success: false,
         message: 'No autorizado para cancelar esta orden'
       });
     }
 
-    // Cancelar en 1inch si tiene orderHash
-    if (order.orderData && order.orderData.orderHash) {
-      try {
-        await oneInchService.cancelOrder(order.orderData.orderHash, signature);
-      } catch (error) {
-        console.warn('Error canceling on 1inch:', error.message);
-      }
-    }
-
-    // Actualizar estado en base de datos
-    order.status = 'CANCELLED';
-    order.cancelledAt = new Date();
-    await order.save();
+    //  Actualizar estado usando Sequelize
+    await order.update({
+      status: 'CANCELLED'
+    });
 
     res.json({
       success: true,
@@ -290,67 +230,5 @@ router.put('/:id/cancel', async (req, res) => {
   }
 });
 
-// GET /api/orders/analytics/summary - Resumen analítico
-router.get('/analytics/summary', async (req, res) => {
-  try {
-    const { userAddress, days = 30 } = req.query;
-
-    const dateFilter = new Date();
-    dateFilter.setDate(dateFilter.getDate() - parseInt(days));
-
-    const matchFilter = {
-      timestamp: { $gte: dateFilter }
-    };
-
-    if (userAddress) {
-      matchFilter.userAddress = userAddress.toLowerCase();
-    }
-
-    const analytics = await Order.aggregate([
-      { $match: matchFilter },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          totalVolume: { 
-            $sum: { $ifNull: ['$executionPrice', 0] } 
-          }
-        }
-      }
-    ]);
-
-    // Obtener órdenes por día para gráfico
-    const dailyStats = await Order.aggregate([
-      { $match: matchFilter },
-      {
-        $group: {
-          _id: {
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
-            status: '$status'
-          },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { '_id.date': 1 } }
-    ]);
-
-    res.json({
-      success: true,
-      message: 'Analytics obtenidas exitosamente',
-      data: {
-        summary: analytics,
-        daily: dailyStats,
-        period: `${days} days`
-      }
-    });
-  } catch (error) {
-    console.error('Error al obtener analytics:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener analytics',
-      error: error.message
-    });
-  }
-});
 
 module.exports = router;
