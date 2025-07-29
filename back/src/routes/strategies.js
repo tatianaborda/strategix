@@ -1,13 +1,16 @@
 const express = require('express');
 const router = express.Router();
+const { Strategy } = require('../models');
+const validateStrategy = require('../middleware/validators/strategyValidator');
 
 // GET /api/strategies - Obtener todas las estrategias
 router.get('/', async (req, res) => {
   try {
+    const strategies = await Strategy.findAll();
     res.json({
       success: true,
       message: 'Estrategias obtenidas exitosamente',
-      data: []
+      data: strategies
     });
   } catch (error) {
     console.error('Error al obtener estrategias:', error);
@@ -19,29 +22,13 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/strategies - Crear nueva estrategia
-router.post('/', async (req, res) => {
+router.post('/', validateStrategy, async (req, res) => {
   try {
-    const { name, conditions, actions } = req.body;
-    
-    // Por ahora solo validamos que los datos básicos estén presentes
-    if (!name || !conditions || !actions) {
-      return res.status(400).json({
-        success: false,
-        message: 'Faltan datos requeridos: name, conditions, actions'
-      });
-    }
-
+    const newStrategy = await Strategy.create(req.body);
     res.status(201).json({
       success: true,
       message: 'Estrategia creada exitosamente',
-      data: {
-        id: Date.now(), // ID temporal
-        name,
-        conditions,
-        actions,
-        status: 'active',
-        createdAt: new Date()
-      }
+      data: newStrategy
     });
   } catch (error) {
     console.error('Error al crear estrategia:', error);
@@ -56,17 +43,19 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+    const strategy = await Strategy.findByPk(id);
+
+    if (!strategy) {
+      return res.status(404).json({
+        success: false,
+        message: 'Estrategia no encontrada'
+      });
+    }
+
     res.json({
       success: true,
       message: 'Estrategia obtenida exitosamente',
-      data: {
-        id,
-        name: 'Estrategia de ejemplo',
-        conditions: [],
-        actions: [],
-        status: 'active'
-      }
+      data: strategy
     });
   } catch (error) {
     console.error('Error al obtener estrategia:', error);
@@ -78,19 +67,21 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/strategies/:id - Actualizar estrategia
-router.put('/:id', async (req, res) => {
+router.put('/:id', validateStrategy, async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
-    
+    const strategy = await Strategy.findByPk(id);
+    if (!strategy) {
+      return res.status(404).json({
+        success: false,
+        message: 'Estrategia no encontrada'
+      });
+    }
+    await strategy.update(req.body);
     res.json({
       success: true,
       message: 'Estrategia actualizada exitosamente',
-      data: {
-        id,
-        ...updateData,
-        updatedAt: new Date()
-      }
+      data: strategy
     });
   } catch (error) {
     console.error('Error al actualizar estrategia:', error);
@@ -101,11 +92,22 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+
 // DELETE /api/strategies/:id - Eliminar estrategia
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+    const strategy = await Strategy.findByPk(id);
+
+    if (!strategy) {
+      return res.status(404).json({
+        success: false,
+        message: 'Estrategia no encontrada'
+      });
+    }
+
+    await strategy.destroy();
+
     res.json({
       success: true,
       message: 'Estrategia eliminada exitosamente'
