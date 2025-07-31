@@ -1,125 +1,57 @@
-const { DataTypes } = require('sequelize');
-
-module.exports = (sequelize) => {
+module.exports = (sequelize, DataTypes) => {
   const Strategy = sequelize.define('Strategy', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true
     },
-    user_id: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
+    userAddress: {
+      type: DataTypes.STRING,
+      allowNull: false
     },
     name: {
-      type: DataTypes.STRING(100),
+      type: DataTypes.STRING,
       allowNull: false
     },
-    strategy_type: {
-      type: DataTypes.ENUM(
-        'LIMIT_ORDER',
-        'DCA',
-        'TWAP', 
-        'GRID_TRADING',
-        'STOP_LOSS',
-        'CONDITIONAL'
-      ),
+    type: {
+      type: DataTypes.ENUM('LIMIT_ORDER', 'TWAP', 'DCA', 'GRID', 'OPTIONS'),
       allowNull: false
     },
-    // Configuración de la estrategia
-    config: {
-      type: DataTypes.JSON,
-      allowNull: false,
-      // Ejemplo: {
-      //   tokenIn: 'ETH',
-      //   tokenOut: 'USDC', 
-      //   amount: '1.0',
-      //   conditions: [
-      //     { type: 'PRICE', operator: '>', value: 3200 },
-      //     { type: 'GAS', operator: '<', value: 50 }
-      //   ],
-      //   logic: 'AND'
-      // }
-    },
-    // Condiciones como array para fácil procesamiento
     conditions: {
-      type: DataTypes.JSON,
-      allowNull: false,
-      defaultValue: []
+      type: DataTypes.JSON, // IF conditions
+      allowNull: false
+    },
+    actions: {
+      type: DataTypes.JSON, // THEN actions (tokens, amounts)
+      allowNull: false
     },
     status: {
-      type: DataTypes.ENUM(
-        'DRAFT',      // Creada pero no activada
-        'ACTIVE',     // Monitoreando condiciones
-        'PAUSED',     // Pausada por usuario
-        'COMPLETED',  // Ejecutada exitosamente
-        'CANCELLED',  // Cancelada por usuario
-        'FAILED'      // Falló en ejecución
-      ),
-      defaultValue: 'DRAFT'
+      type: DataTypes.ENUM('active', 'paused', 'completed', 'cancelled'),
+      defaultValue: 'active'
     },
-    // Metadata para 1inch
-    order_data: {
-      type: DataTypes.JSON,
-      allowNull: true
-      // Contiene: signature, salt, deadline, etc.
+    isExecuting: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
     },
-    // IPFS hash para estrategias compartidas
-    ipfs_hash: {
-      type: DataTypes.STRING(100),
-      allowNull: true
+    autoExecute: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
     },
-    // Tracking de ejecución
-    executions_count: {
+    executedIntervals: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    last_execution: {
-      type: DataTypes.DATE,
-      allowNull: true
+    lastExecuted: {
+      type: DataTypes.DATE
     },
-    // Para DCA y TWAP
-    total_amount: {
-      type: DataTypes.DECIMAL(36, 18),
-      allowNull: true
-    },
-    executed_amount: {
-      type: DataTypes.DECIMAL(36, 18),
-      defaultValue: '0'
+    completedAt: {
+      type: DataTypes.DATE
     }
-  }, {
-    tableName: 'strategies',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    indexes: [
-      {
-        fields: ['user_id']
-      },
-      {
-        fields: ['status']
-      },
-      {
-        fields: ['strategy_type']
-      },
-      {
-        fields: ['created_at']
-      }
-    ]
   });
 
-  Strategy.associate = (models) => {
-    Strategy.belongsTo(models.User, {
-      foreignKey: 'user_id',
-      as: 'user'
-    });
-    
+  Strategy.associate = function(models) {
     Strategy.hasMany(models.Order, {
-      foreignKey: 'strategy_id',
+      foreignKey: 'strategyId',
       as: 'orders'
     });
   };
