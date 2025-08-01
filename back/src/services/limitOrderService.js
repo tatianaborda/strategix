@@ -1,5 +1,6 @@
 
-const { LimitOrderBuilder, LimitOrderProtocolFacade } = require('@1inch/limit-order-protocol-utils');
+const { LimitOrderBuilder } = require('@1inch/limit-order-protocol-utils');
+const abi = require('../abis/LimitOrderProtocol');
 const { ethers } = require('ethers');
 const { getProvider, getWallet } = require('../utils/eth'); // toDO access to signer
 const { Order } = require('../models'); // Sequelize model
@@ -13,9 +14,10 @@ const builder = new LimitOrderBuilder(
   CHAIN_ID
 );
 
-const protocol = new LimitOrderProtocolFacade(
+const contract = new ethers.Contract(
   LIMIT_ORDER_PROTOCOL_ADDRESS,
-  getProvider()
+  abi.abi, // el ABI generado por Hardhat está bajo la propiedad "abi"
+  getWallet() // o getProvider().getSigner() 
 );
 
 /**
@@ -67,12 +69,13 @@ async function createLimitOrder(strategy) {
  * Ejecuta una orden onchain usando el contrato de 1inch
  */
 async function executeOrderOnChain(order, signature) {
-  const wallet = getWallet();
-
   try {
-    const tx = await protocol.fillLimitOrder(order, signature, order.makingAmount, 0, {
-      from: wallet.address,
-    });
+    const tx = await contract.fillOrder(
+      order,
+      signature,
+      order.makingAmount,
+      0 // takingAmount
+    );
 
     const receipt = await tx.wait();
 
@@ -88,7 +91,6 @@ async function executeOrderOnChain(order, signature) {
     };
   }
 }
-
 module.exports = {
   createLimitOrder,
   executeOrderOnChain,
