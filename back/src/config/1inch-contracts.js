@@ -52,12 +52,12 @@ module.exports = {
   LIMIT_ORDER_PROTOCOL_ABI,
   COMMON_TOKENS,
   
-  // Helper function para obtener configuración por red
-  getContractAddress: (network = 'LOCAL', contractName = 'LIMIT_ORDER_PROTOCOL') => {
-    return ONEINCH_CONTRACTS[network.toUpperCase()]?.[contractName];
-  },
-  
-  getTokenAddress: (network = 'LOCAL', tokenSymbol = 'WETH') => {
-    return COMMON_TOKENS[network.toUpperCase()]?.[tokenSymbol];
-  }
+//  MAINNET instead of LOCAL
+getContractAddress: (network = 'MAINNET', contractName = 'LIMIT_ORDER_PROTOCOL') => {
+  return ONEINCH_CONTRACTS[network.toUpperCase()]?.[contractName];
+},
+
+getTokenAddress: (network = 'MAINNET', tokenSymbol = 'WETH') => {
+  return COMMON_TOKENS[network.toUpperCase()]?.[tokenSymbol];
+}
 };

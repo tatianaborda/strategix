@@ -1,6 +1,7 @@
 import Header from './components/Header'
 import Hero from './components/Hero'
-import LimitOrderBot from './components/LimitOrderBot'
+// import LimitOrderBot from './components/LimitOrderBot'
+import CombinedOrderStrategy from './components/CombinedOrderStrategy' // Asegurate que esté en esa ruta
 
 export default function App() {
   return (
@@ -13,10 +14,10 @@ export default function App() {
         <Header />
         
         <main className="flex items-center justify-between px-6 py-12 min-h-[calc(100vh-100px)]">
-          <Hero/>
+          <Hero />
           
           <div className="flex-shrink-0 ml-12">
-            <LimitOrderBot />
+            <CombinedOrderStrategy />
           </div>
         </main>
       </div>
