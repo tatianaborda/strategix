@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize'); // Importar DataTypes
 const config = require('../config/database');
 
 // Crear instancia de Sequelize
@@ -20,10 +20,10 @@ const sequelize = new Sequelize(
   }
 );
 
-// Importar modelos
-const User = require('./User')(sequelize);
-const Strategy = require('./Strategy')(sequelize);
-const Order = require('./Order')(sequelize);
+// Importar modelos - pasar ambos parámetros
+const User = require('./User')(sequelize, DataTypes);
+const Strategy = require('./Strategy')(sequelize, DataTypes);
+const Order = require('./Order')(sequelize, DataTypes);
 
 // Configurar asociaciones
 const models = { User, Strategy, Order };
@@ -42,4 +42,3 @@ module.exports = {
   Strategy, 
   Order
 };
-

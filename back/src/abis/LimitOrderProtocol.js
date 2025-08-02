@@ -1,4 +1,5 @@
-export const LimitOrderProtocolABI = [
+module.exports = {
+   abi: [
   {
     "inputs": [
       { "internalType": "uint256", "name": "salt", "type": "uint256" },
@@ -65,4 +66,5 @@ export const LimitOrderProtocolABI = [
     "stateMutability": "view",
     "type": "function"
   }
-];
+]
+}

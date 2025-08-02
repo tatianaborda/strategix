@@ -2,21 +2,18 @@ const priceService = require('./priceService');
 
 async function evaluateConditions(conditions) {
   try {
-    // Si no hay condiciones específicas, ejecutar
     if (!conditions || Object.keys(conditions).length === 0) {
       return true;
     }
     
-    // Evaluar condición de precio si existe
     if (conditions.targetPrice && conditions.operator) {
-      // Se evaluará en processLimitOrder usando priceService
       return true;
     }
     
-    // Evaluar otras condiciones personalizadas
     if (conditions.customLogic) {
-      // TODO: Implementar lógica personalizada
-      return true;
+      // Implementar lógica personalizada aquí si es necesario
+      console.log('Custom logic not implemented yet');
+      return false;
     }
     
     return true;

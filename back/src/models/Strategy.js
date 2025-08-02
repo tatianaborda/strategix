@@ -18,11 +18,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     conditions: {
-      type: DataTypes.JSON, // IF conditions
+      type: DataTypes.JSON,
       allowNull: false
     },
     actions: {
-      type: DataTypes.JSON, // THEN actions (tokens, amounts)
+      type: DataTypes.JSON,
       allowNull: false
     },
     status: {
@@ -47,11 +47,16 @@ module.exports = (sequelize, DataTypes) => {
     completedAt: {
       type: DataTypes.DATE
     }
+  }, {
+    tableName: 'strategies',
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at'
   });
 
-  Strategy.associate = function(models) {
+  Strategy.associate = (models) => {
     Strategy.hasMany(models.Order, {
-      foreignKey: 'strategyId',
+      foreignKey: 'strategy_id',
       as: 'orders'
     });
   };

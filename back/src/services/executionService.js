@@ -9,7 +9,7 @@ class ExecutionService {
   constructor() {
     this.activeStrategies = new Map();
     this.isRunning = false;
-    this.provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
+    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL); // Cambio para ethers v6
   }
 
   // Iniciar el motor de ejecución
@@ -156,7 +156,7 @@ class ExecutionService {
               },
               { 
                 where: { 
-                  strategyId: strategy.id,
+                  strategy_id: strategy.id,
                   status: 'pending'
                 }
               }
@@ -184,7 +184,7 @@ class ExecutionService {
               },
               { 
                 where: { 
-                  strategyId: strategy.id,
+                  strategy_id: strategy.id,
                   status: 'pending'
                 }
               }
@@ -252,7 +252,7 @@ class ExecutionService {
                 },
                 { 
                   where: { 
-                    strategyId: strategy.id,
+                    strategy_id: strategy.id,
                     status: 'pending'
                   },
                   order: [['created_at', 'DESC']],
@@ -305,7 +305,7 @@ class ExecutionService {
                 },
                 { 
                   where: { 
-                    strategyId: strategy.id,
+                    strategy_id: strategy.id,
                     status: 'pending'
                   },
                   order: [['created_at', 'DESC']],
