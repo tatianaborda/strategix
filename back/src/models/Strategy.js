@@ -41,6 +41,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
+    createdAt: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+    },
     lastExecuted: {
       type: DataTypes.DATE
     },

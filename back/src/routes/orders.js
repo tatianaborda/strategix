@@ -3,7 +3,7 @@ const router = express.Router();
 const Order = require('../models/Order');
 const Strategy = require('../models/Strategy');
 const orderController = require('../controllers/orderController');
-const { validateOrder } = require('../middleware/validators/orderValidator');
+const { validateOrder } = require('../validators/orderValidator');
 const { executeOrderOnChain } = require('../services/limitOrderService');
 
 // GET /api/orders - Obtener todas las órdenes (con filtros)
@@ -181,8 +181,8 @@ router.get('/user/:userAddress', async (req, res) => {
   }
 });
 
-//POST MANUAL- WIP
-router.post('/manual', validateOrder, orderController.createManualOrder);
+//POST 
+router.post('/', validateOrder, orderController.createOrder);
 
 // PUT /api/orders/:id/cancel for SEQUELIZE
 router.put('/:id/cancel', async (req, res) => {

@@ -5,15 +5,16 @@ import Select from './ui/Select';
 import Button from './ui/Button';
 import { fetchStrategies } from '../services/strategyService';
 import { createOrder } from '../services/orderService';
-import { signOrder } from '../lib/limitOrder'; 
+import { signOrder } from '../lib/limitOrder';
 
 export default function CreateOrder() {
   const { account, signer } = useWallet();
   const [strategies, setStrategies] = useState([]);
   const [selectedStrategy, setSelectedStrategy] = useState(null);
   const [executionPrice, setExecutionPrice] = useState('');
+  const [amount, setAmount] = useState('1');
   const [status, setStatus] = useState('');
-  
+
   useEffect(() => {
     if (!account) return;
     fetchStrategies(account).then(data => {
@@ -22,7 +23,7 @@ export default function CreateOrder() {
   }, [account]);
 
   const handleCreate = async () => {
-    if (!selectedStrategy || !executionPrice) {
+    if (!selectedStrategy || !executionPrice || !amount) {
       return setStatus('Faltan datos');
     }
 
@@ -31,16 +32,19 @@ export default function CreateOrder() {
     try {
       const orderPayload = {
         strategy_id: selectedStrategy.id,
-        execution_price: executionPrice,
-        wallet_address: account
+        price: executionPrice,
+        amount,
+        pair: selectedStrategy?.actions?.[0]?.tokenPair || 'ETH/USDC',
+        timestamp: Date.now(),
+        wallet: account
       };
 
-      // 🔐 Paso 1: firmar onchain
       const signedOrder = await signOrder(orderPayload, signer);
 
-      // 🧾 Paso 2: enviar al backend
       const finalOrder = {
         ...orderPayload,
+        execution_price: executionPrice,
+        wallet_address: account,
         order_data: signedOrder.orderData,
         order_hash: signedOrder.orderHash
       };
@@ -50,6 +54,7 @@ export default function CreateOrder() {
       if (response?.success) {
         setStatus('Orden creada correctamente 🎯');
         setExecutionPrice('');
+        setAmount('1');
       } else {
         setStatus('Error al crear la orden');
       }
@@ -80,6 +85,13 @@ export default function CreateOrder() {
           placeholder="Ej: 3150.00"
           value={executionPrice}
           onChange={e => setExecutionPrice(e.target.value)}
+        />
+
+        <Input
+          label="Cantidad"
+          placeholder="Ej: 1"
+          value={amount}
+          onChange={e => setAmount(e.target.value)}
         />
 
         <Button onClick={handleCreate} className="w-full">

@@ -1,7 +1,7 @@
 const { createLimitOrder, executeOrderOnChain } = require('../services/limitOrderService');
 const { Order } = require('../models');
 
-exports.createManualOrder = async (req, res) => {
+exports.createOrder = async (req, res) => {
   try {
     const {
       userAddress,
@@ -12,7 +12,7 @@ exports.createManualOrder = async (req, res) => {
       conditions = {}
     } = req.body;
 
-    // Crear estrategia temporal para orden manual
+    // Crear estrategia temporal para orden
     const tempStrategy = {
       id: null,
       conditions: conditions,
@@ -40,7 +40,7 @@ exports.createManualOrder = async (req, res) => {
 
     // Guardar con estructura CORRECTA para Sequelize
     const savedOrder = await Order.create({
-      strategy_id: null, // Orden manual
+      strategy_id: null, // Orden 
       order_hash: require('../services/limitOrderService').builder?.buildLimitOrderHash(order) || 'manual_' + Date.now(),
       order_data: order, // Sequelize maneja JSON automáticamente
       token_in: makerAsset,
@@ -56,7 +56,7 @@ exports.createManualOrder = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Orden manual creada exitosamente',
+      message: 'Orden creada exitosamente',
       data: {
         order: savedOrder,
         limitOrder: order,

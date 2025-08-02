@@ -217,7 +217,6 @@ class OneInchLimitOrderService {
   }
 }
 
-// Exportar instancia singleton
 const limitOrderService = new OneInchLimitOrderService();
 
 module.exports = {
