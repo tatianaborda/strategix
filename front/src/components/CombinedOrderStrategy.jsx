@@ -15,6 +15,7 @@ export default function CombinedOrderStrategy() {
   const [amount, setAmount] = useState('');
 
   const [strategies, setStrategies] = useState([]);
+  const [createdOrders, setCreatedOrders] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [refreshingStrategies, setRefreshingStrategies] = useState(false);
 
@@ -41,17 +42,16 @@ export default function CombinedOrderStrategy() {
     'MATIC': '0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0'  // MATIC
   };
 
- 
-const validateAndFormatAddress = (address) => {
-  try {
-    if (!address) throw new Error('Empty address');
-    if (!ethers.isAddress(address)) throw new Error('Invalid address');
-    return ethers.getAddress(address.toLowerCase());
-  } catch (error) {
-    console.error('Error validating address:', address, error);
-    throw new Error(`Invalid address: ${address}`);
-  }
-};
+  const validateAndFormatAddress = (address) => {
+    try {
+      if (!address) throw new Error('Empty address');
+      if (!ethers.isAddress(address)) throw new Error('Invalid address');
+      return ethers.getAddress(address.toLowerCase());
+    } catch (error) {
+      console.error('Error validating address:', address, error);
+      throw new Error(`Invalid address: ${address}`);
+    }
+  };
 
   const showMessage = (message, type = 'success') => {
     if (type === 'success') {
@@ -123,6 +123,7 @@ const validateAndFormatAddress = (address) => {
       refreshStrategies();
     } else {
       setStrategies([]);
+      setCreatedOrders([]); 
     }
   }, [account, isConnected]);
 
@@ -224,88 +225,122 @@ const validateAndFormatAddress = (address) => {
     }
   };
 
-const handleCreateOrder = async (strategy) => {
-  if (!isConnected || !signer) {
-    showMessage('Wallet is not connected properly', 'error');
-    return;
-  }
-
-  try {
-    setLoading(true);
-    
-    const action = strategy.actions?.[0];
-    if (!action) {
-      throw new Error('strategy without actions');
-    }
-    
-    const [baseToken, quoteToken] = action.tokenPair.split('/');
-
-    const makerAssetRaw = TOKEN_ADDRESSES[baseToken];
-    const takerAssetRaw = TOKEN_ADDRESSES[quoteToken];
-    
-    if (!makerAssetRaw || !takerAssetRaw) {
-      throw new Error(`not supported Token: ${baseToken} o ${quoteToken}`);
+  const handleCreateOrder = async (strategy) => {
+    if (!isConnected || !signer) {
+      showMessage('Wallet is not connected properly', 'error');
+      return;
     }
 
-    const makerAsset = validateAndFormatAddress(makerAssetRaw);
-    const takerAsset = validateAndFormatAddress(takerAssetRaw);
-    const maker = validateAndFormatAddress(account);
+    try {
+      setLoading(true);
+      
+      const action = strategy.actions?.[0];
+      if (!action) {
+        throw new Error('Strategy without actions');
+      }
+      
+      const [baseToken, quoteToken] = action.tokenPair.split('/');
 
-    const makingAmountWei = ethers.parseEther(action.amount.toString());
-    const takingAmountWei = ethers.parseUnits(
-      (action.amount * action.price).toString(), 
-      6 
-    );
-    
-    const orderParams = {
-      makerAsset,
-      takerAsset,
-      makingAmount: makingAmountWei.toString(), 
-      takingAmount: takingAmountWei.toString(), 
-      maker
-    };
+      const makerAssetRaw = TOKEN_ADDRESSES[baseToken];
+      const takerAssetRaw = TOKEN_ADDRESSES[quoteToken];
+      
+      if (!makerAssetRaw || !takerAssetRaw) {
+        throw new Error(`Unsupported token: ${baseToken} or ${quoteToken}`);
+      }
 
-    console.log('🔨 Creting limit order with params:', orderParams);
+      const makerAsset = validateAndFormatAddress(makerAssetRaw);
+      const takerAsset = validateAndFormatAddress(takerAssetRaw);
+      const maker = validateAndFormatAddress(account);
 
-    // Create and sign te order
-    const signedOrder = await createAndSignLimitOrder(orderParams, signer);
-    const payload = {
-      strategy_id: strategy.id,
-      userAddress: account,
-      orderData: {
+      const makingAmountWei = ethers.parseEther(action.amount.toString());
+      
+      // Calculating takingAmount 
+      const totalValue = action.amount * action.price;
+      console.log('💰 Calculation debug:', {
+        amount: action.amount,
+        price: action.price,
+        totalValue: totalValue,
+        totalValueString: totalValue.toString()
+      });
+      
+      // Using Math.round to calculate 
+      const totalValueInCents = Math.round(totalValue * 1000000); 
+      const takingAmountWei = ethers.parseUnits((totalValueInCents / 1000000).toFixed(6), 6);
+      
+      const orderParams = {
         makerAsset,
         takerAsset,
-        makingAmount: makingAmountWei.toString(),
-        takingAmount: takingAmountWei.toString(),
-        salt: ethers.toBigInt(ethers.hexlify(ethers.randomBytes(32))).toString(),
-        maker: account,
-        makerTraits: '0'
-      },
-      orderHash: signedOrder.orderHash,
-      signature: signedOrder.signature,
-      makerSymbol: baseToken,
-      takerSymbol: quoteToken,
-      priceAtCreation: action.price
-    };
+        makingAmount: makingAmountWei.toString(), 
+        takingAmount: takingAmountWei.toString(), 
+        maker
+      };
 
-    console.log('📤 Payload completo para el backend:', payload);
-    
-    const response = await createOrder(payload);
+      console.log('🔨 Creating limit order with params:', {
+        ...orderParams,
+        makingAmountFormatted: `${ethers.formatEther(makingAmountWei)} ${baseToken}`,
+        takingAmountFormatted: `${ethers.formatUnits(takingAmountWei, 6)} ${quoteToken}`,
+        totalValue: totalValue,
+        totalValueInCents: totalValueInCents,
+        finalAmount: (totalValueInCents / 1000000).toFixed(6),
+        price: action.price
+      });
 
-    if (!response?.success) {
-      throw new Error(response?.error || 'Error creating the order');
+      // Create and sign the order
+      const signedOrder = await createAndSignLimitOrder(orderParams, signer);
+      
+      const payload = {
+        strategy_id: strategy.id,
+        userAddress: account,
+        orderData: {
+          makerAsset: makerAsset,
+          takerAsset: takerAsset,
+          makingAmount: makingAmountWei.toString(),
+          takingAmount: takingAmountWei.toString(),
+          maker: account
+        }
+      };
+
+      console.log('📤 Payload completo para el backend:', payload);
+      
+      const response = await createOrder(payload);
+
+      if (!response?.success) {
+        throw new Error(response?.error || 'Error creating the order');
+      }
+
+      // Creating an object to show
+      const newOrder = {
+        id: Date.now(), // Temporal ID
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        pair: action.tokenPair,
+        amount: action.amount,
+        price: action.price,
+        totalValue: (totalValueInCents / 1000000),
+        status: 'created',
+        createdAt: new Date(),
+        orderHash: response.data?.orderHash || 'N/A',
+        txHash: response.data?.txHash || 'N/A',
+        baseToken,
+        quoteToken
+      };
+
+      // add to created orders list
+      setCreatedOrders(prev => [newOrder, ...prev]);
+
+      // remove from strategy list because no♂ is and order
+      setStrategies(prev => prev.filter(s => s.id !== strategy.id));
+
+      showMessage('✅ Order created successfully and moved to orders section!', 'success');
+
+    } catch (error) {
+      console.error('Error creating the order:', error);
+      showMessage(`❌ ${error.message}`, 'error');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    showMessage('✅ Order creted successfully!', 'success');
-    await refreshStrategies();
-
-  } catch (error) {
-    console.error('Error creating the order:', error);
-    showMessage(`❌ ${error.message}`, 'error');
-  } finally {
-    setLoading(false);
-  }
-};
   const formatPrice = (price) => {
     const num = parseFloat(price);
     return isNaN(num) ? '0' : num.toLocaleString('en-US', { 
@@ -319,7 +354,8 @@ const handleCreateOrder = async (strategy) => {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case 'active': return 'text-green-400';
-      case 'completed': return 'text-blue-400';
+      case 'created': return 'text-blue-400';
+      case 'completed': return 'text-purple-400';
       case 'paused': return 'text-yellow-400';
       case 'failed': return 'text-red-400';
       default: return 'text-slate-400';
@@ -329,6 +365,7 @@ const handleCreateOrder = async (strategy) => {
   const getStatusIcon = (status) => {
     switch (status?.toLowerCase()) {
       case 'active': return '🟢';
+      case 'created': return '🆕';
       case 'completed': return '✅';
       case 'paused': return '⏸️';
       case 'failed': return '❌';
@@ -337,13 +374,13 @@ const handleCreateOrder = async (strategy) => {
   };
 
   return (
-    <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto p-4">
+    <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-4">
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2">
           Strategix Trading
         </h1>
-        <p className="text-slate-400">Create your strategies</p>
+        <p className="text-slate-400">Create strategies and execute orders</p>
       </div>
 
       {/* Connection Status */}
@@ -366,7 +403,8 @@ const handleCreateOrder = async (strategy) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Create Strategy Section */}
         <div className="bg-slate-800/80 backdrop-blur-sm p-6 rounded-2xl border border-slate-600/30 shadow-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
@@ -387,7 +425,7 @@ const handleCreateOrder = async (strategy) => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <Input
                   label="Sell Price (USD)"
@@ -434,6 +472,7 @@ const handleCreateOrder = async (strategy) => {
           </div>
         </div>
 
+        {/* My Strategies Section */}
         <div className="bg-slate-800/80 backdrop-blur-sm p-6 rounded-2xl border border-slate-600/30 shadow-2xl">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -447,7 +486,7 @@ const handleCreateOrder = async (strategy) => {
               onClick={refreshStrategies}
               disabled={refreshingStrategies || !isConnected}
               className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors disabled:opacity-50"
-              title="Actualizar estrategias"
+              title="Refresh strategies"
             >
               <span className={`text-lg ${refreshingStrategies ? 'animate-spin' : ''}`}>🔄</span>
             </button>
@@ -521,23 +560,105 @@ const handleCreateOrder = async (strategy) => {
             )}
           </div>
         </div>
+        <div className="bg-slate-800/80 backdrop-blur-sm p-6 rounded-2xl border border-slate-600/30 shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
+                <span className="text-lg">📝</span>
+              </div>
+              <h2 className="text-xl font-semibold text-emerald-300">Created Orders</h2>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full text-xs font-medium">
+                {createdOrders.length}
+              </span>
+            </div>
+          </div>
+
+          <div className="max-h-96 overflow-y-auto custom-scrollbar">
+            {!isConnected ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">🔌</span>
+                </div>
+                <p className="text-slate-400">Connect your wallet to see your orders</p>
+              </div>
+            ) : createdOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">📝</span>
+                </div>
+                <p className="text-slate-400 mb-2">No orders created yet</p>
+                <p className="text-slate-500 text-sm">Create orders from your strategies</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {createdOrders.map(order => (
+                  <div key={order.id} className="bg-slate-700/60 backdrop-blur-sm p-4 rounded-xl border border-slate-600/30 hover:border-emerald-500/50 transition-all duration-200">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm">
+                            {pairs.find(p => p.value === order.pair)?.icon || '🔸'}
+                          </span>
+                          <h3 className="font-medium text-emerald-200 truncate text-sm">{order.strategyName}</h3>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs">{getStatusIcon(order.status)}</span>
+                            <span className={`text-xs font-medium ${getStatusColor(order.status)}`}>
+                              {order.status?.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-slate-400 space-y-1">
+                          <p>💰 Selling: {order.amount} {order.baseToken}</p>
+                          <p>📈 Price: {formatPrice(order.price)}</p>
+                          <p>💵 Total: {formatPrice(order.totalValue)}</p>
+                          <p>🕒 Created: {order.createdAt.toLocaleString()}</p>
+                          {order.orderHash !== 'N/A' && (
+                            <p className="text-emerald-400">🔗 Hash: {order.orderHash.slice(0, 10)}...</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1 text-xs bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300"
+                        disabled
+                      >
+                        ✅ Order Active
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Stats Footer */}
-      {isConnected && strategies.length > 0 && (
+      {/* Enhanced Stats Footer */}
+      {isConnected && (strategies.length > 0 || createdOrders.length > 0) && (
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-600/30">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold text-cyan-400">{strategies.length}</p>
-              <p className="text-xs text-slate-400">Total Estrategias</p>
+              <p className="text-xs text-slate-400">Active Strategies</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-emerald-400">{createdOrders.length}</p>
+              <p className="text-xs text-slate-400">Created Orders</p>
             </div>
             <div>
               <p className="text-2xl font-bold text-green-400">{strategies.filter(s => s.status === 'active').length}</p>
-              <p className="text-xs text-slate-400">Activas</p>
+              <p className="text-xs text-slate-400">Ready to Execute</p>
             </div>
             <div>
-              <p className="text-2xl font-bold text-blue-400">{strategies.filter(s => s.status === 'completed').length}</p>
-              <p className="text-xs text-slate-400">Completadas</p>
+              <p className="text-2xl font-bold text-blue-400">{createdOrders.filter(o => o.status === 'created').length}</p>
+              <p className="text-xs text-slate-400">Orders Live</p>
             </div>
             <div>
               <p className="text-2xl font-bold text-purple-400">{account ? `${account.slice(0,6)}...${account.slice(-4)}` : ''}</p>
