@@ -16,20 +16,20 @@ const strategySchema = Joi.object({
 
 const validateStrategy = (req, res, next) => {
   const { error, value } = strategySchema.validate(req.body, {
-    abortEarly: false, // Mostrar todos los errores, no solo el primero
-    allowUnknown: false // No permitir campos no definidos en el schema
+    abortEarly: false, 
+    allowUnknown: false 
   });
 
   if (error) {
     const errorMessages = error.details.map(detail => detail.message);
     return res.status(400).json({
       success: false,
-      message: 'Error de validación',
+      message: 'Error validating',
       errors: errorMessages
     });
   }
 
-  req.body = value; // Asignar el valor validado
+  req.body = value; 
   next();
 };
 

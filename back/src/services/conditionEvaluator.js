@@ -11,7 +11,6 @@ async function evaluateConditions(conditions) {
     }
     
     if (conditions.customLogic) {
-      // Implementar lógica personalizada aquí si es necesario
       console.log('Custom logic not implemented yet');
       return false;
     }

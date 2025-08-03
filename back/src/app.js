@@ -33,7 +33,7 @@ app.use((err, req, res, next) => {
   console.error('Error stack:', err.stack);
   res.status(500).json({ 
     success: false, 
-    error: 'Error interno del servidor',
+    error: 'Internal error',
     ...(process.env.NODE_ENV === 'development' && { details: err.message })
   });
 });

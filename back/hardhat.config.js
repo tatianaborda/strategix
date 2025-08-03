@@ -11,10 +11,10 @@ module.exports = {
         blockNumber: 18500000 
       },
       chainId: 31337,
-      accounts: {
-        count: 20,
-        initialBalance: "10000000000000000000000"
-      }
+       accounts: [{
+        privateKey: process.env.PRIVATE_KEY,
+        balance: "10000000000000000000000" // 10,000 ETH
+      }]
     }
   }
 };

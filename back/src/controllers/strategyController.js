@@ -1,16 +1,15 @@
 const { Strategy, Order } = require('../models');
 const executionService = require('../services/executionService');
-const { createLimitOrder } = require('../services/limitOrderService');
 
 const createStrategy = async (req, res) => {
   try {
     console.log('Datos recibidos para crear estrategia:', req.body); // Debug log
     
-    // Mapear datos validados del validator al modelo
+    // Maping data
     const strategyData = {
-      userAddress: req.body.user_id || req.body.userAddress, // Soportar ambos nombres
+      userAddress: req.body.user_id || req.body.userAddress, // Support both
       name: req.body.name,
-      type: req.body.strategy_type || req.body.type, // Soportar ambos nombres
+      type: req.body.strategy_type || req.body.type, // Support both
       conditions: req.body.conditions,
       actions: req.body.actions,
       config: req.body.config || {},
@@ -19,7 +18,7 @@ const createStrategy = async (req, res) => {
 
     console.log('Datos mapeados para crear estrategia:', strategyData); // Debug log
 
-    // Crear estrategia en la base de datos
+  
     const strategy = await Strategy.create(strategyData);
     
     // Agregar al motor de ejecución
@@ -27,12 +26,11 @@ const createStrategy = async (req, res) => {
       executionService.addStrategy(strategy);
     } catch (serviceError) {
       console.warn('Error adding strategy to execution service:', serviceError);
-      // No fallar la creación si el servicio de ejecución falla
     }
 
     return res.status(201).json({
       success: true,
-      message: 'Estrategia creada correctamente',
+      message: 'Strategy created successfully!',
       data: {
         id: strategy.id,
         name: strategy.name,
@@ -47,13 +45,13 @@ const createStrategy = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error creando estrategia:', error);
+    console.error('Error creating strategy:', error);
     
-    // Manejar diferentes tipos de errores
+
     const statusCode = error.name === 'SequelizeValidationError' ? 400 : 500;
     const errorMessage = error.name === 'SequelizeValidationError' 
-      ? 'Datos de estrategia inválidos'
-      : 'Error interno al crear la estrategia';
+      ? 'invalid strategy Data'
+      : 'internal Error';
 
     return res.status(statusCode).json({
       success: false,
@@ -67,44 +65,36 @@ const createStrategy = async (req, res) => {
 const getAllStrategies = async (req, res) => {
   try {
     const { walletAddress, userAddress } = req.query;
-    
-    console.log('Request para obtener estrategias:', { walletAddress, userAddress }); // Debug log
-    
-    // Construir filtro
     const whereClause = {};
     const addressToFilter = walletAddress || userAddress;
     
     if (addressToFilter) {
       whereClause.userAddress = addressToFilter.toLowerCase();
     }
-
-    console.log('Filtro aplicado:', whereClause); // Debug log
-
     const strategies = await Strategy.findAll({
       where: whereClause,
       order: [['createdAt', 'DESC']],
       include: [
         {
           model: Order,
-          as: 'orders', // Asegúrate de que esta asociación esté definida en tu modelo
+          as: 'orders', 
           required: false
         }
       ]
     });
 
-    console.log(`Estrategias encontradas: ${strategies.length}`); // Debug log
+    console.log(`Found Strategies: ${strategies.length}`); // Debug log
 
-    // Estructura de respuesta consistente
     res.json({
       success: true,
-      message: 'Estrategias obtenidas exitosamente',
+      message: 'Success getting all strategies!',
       data: strategies || []
     });
   } catch (error) {
-    console.error('Error al obtener estrategias:', error);
+    console.error('Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
+      message: 'internal Error',
       error: error.message,
       data: []
     });
@@ -128,21 +118,21 @@ const getStrategyById = async (req, res) => {
     if (!strategy) {
       return res.status(404).json({
         success: false,
-        message: 'Estrategia no encontrada',
+        message: 'strategy not found',
         data: null
       });
     }
 
     res.json({
       success: true,
-      message: 'Estrategia obtenida exitosamente',
+      message: 'Success getting strategy!',
       data: strategy
     });
   } catch (error) {
-    console.error('Error al obtener estrategia:', error);
+    console.error('Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
+      message: 'internal Error',
       error: error.message,
       data: null
     });
@@ -159,15 +149,12 @@ const updateStrategy = async (req, res) => {
     if (!strategy) {
       return res.status(404).json({
         success: false,
-        message: 'Estrategia no encontrada',
+        message: 'strategy not found',
         data: null
       });
     }
 
-    // Actualizar estrategia
     await strategy.update(updates);
-
-    // Actualizar en el servicio de ejecución si está activa
     if (strategy.status === 'active') {
       try {
         executionService.updateStrategy(strategy);
@@ -178,14 +165,14 @@ const updateStrategy = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Estrategia actualizada exitosamente',
+      message: 'Success updating strategy!',
       data: strategy
     });
   } catch (error) {
-    console.error('Error al actualizar estrategia:', error);
+    console.error('Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
+      message: 'Internal error',
       error: error.message,
       data: null
     });
@@ -202,11 +189,10 @@ const deleteStrategy = async (req, res) => {
     if (!strategy) {
       return res.status(404).json({
         success: false,
-        message: 'Estrategia no encontrada'
+        message: 'strategy not found'
       });
     }
 
-    // Verificar propietario
     if (userAddress && strategy.userAddress.toLowerCase() !== userAddress.toLowerCase()) {
       return res.status(403).json({
         success: false,
@@ -214,7 +200,6 @@ const deleteStrategy = async (req, res) => {
       });
     }
 
-    // Remover del servicio de ejecución
     try {
       executionService.removeStrategy(id);
     } catch (serviceError) {
@@ -232,13 +217,13 @@ const deleteStrategy = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Estrategia eliminada exitosamente'
+      message: 'strategy deleted!'
     });
   } catch (error) {
-    console.error('Error al eliminar estrategia:', error);
+    console.error('Error deleting:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
+      message: 'Internal Error',
       error: error.message
     });
   }
@@ -253,31 +238,30 @@ const executeStrategy = async (req, res) => {
     if (!strategy) {
       return res.status(404).json({
         success: false,
-        message: 'Estrategia no encontrada'
+        message: 'strategy not found'
       });
     }
 
     if (strategy.status !== 'active') {
       return res.status(400).json({
         success: false,
-        message: 'La estrategia no está activa'
+        message: ' not active strategy'
       });
     }
 
-    // Ejecutar estrategia manualmente
     try {
       const result = await executionService.executeStrategy(strategy);
       
       res.json({
         success: true,
-        message: 'Estrategia ejecutada exitosamente',
+        message: 'Success',
         data: result
       });
     } catch (executionError) {
-      console.error('Error ejecutando estrategia:', executionError);
+      console.error('Error:', executionError);
       res.status(500).json({
         success: false,
-        message: 'Error al ejecutar estrategia',
+        message: 'Error',
         error: executionError.message
       });
     }
@@ -285,7 +269,7 @@ const executeStrategy = async (req, res) => {
     console.error('Error en executeStrategy:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
+      message: 'internal error',
       error: error.message
     });
   }
@@ -301,12 +285,11 @@ const getStrategyOrders = async (req, res) => {
     if (!strategy) {
       return res.status(404).json({
         success: false,
-        message: 'Estrategia no encontrada',
+        message: 'strategy not found',
         data: []
       });
     }
 
-    // Construir filtro para órdenes
     const whereClause = { strategy_id: id };
     if (status) {
       whereClause.status = status.toUpperCase();
@@ -317,7 +300,7 @@ const getStrategyOrders = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    // Estadísticas de órdenes
+    // Stats
     const stats = {
       total: orders.length,
       executed: orders.filter(o => o.status === 'FILLED').length,
@@ -328,7 +311,7 @@ const getStrategyOrders = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Órdenes de estrategia obtenidas exitosamente',
+      message: 'Strategy orders',
       data: {
         orders,
         stats,
@@ -341,10 +324,10 @@ const getStrategyOrders = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error al obtener órdenes de estrategia:', error);
+    console.error('Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
+      message: 'internal error',
       error: error.message,
       data: []
     });

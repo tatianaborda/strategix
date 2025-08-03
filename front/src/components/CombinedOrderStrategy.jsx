@@ -5,22 +5,19 @@ import Select from './ui/Select';
 import { createStrategy, fetchStrategies } from '../services/strategyService';
 import { createOrder } from '../services/orderService';
 import useWallet from '../hooks/useWallet';
+import { createAndSignLimitOrder } from '../lib/limitOrder';
 import { ethers } from 'ethers';
 
 export default function CombinedOrderStrategy() {
   const { account, signer, isConnected } = useWallet();
-
-  // Estado para crear estrategia
   const [selectedPair, setSelectedPair] = useState('ETH/USDC');
   const [sellPrice, setSellPrice] = useState('');
   const [amount, setAmount] = useState('');
-  
-  // Estado para estrategias
+
   const [strategies, setStrategies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshingStrategies, setRefreshingStrategies] = useState(false);
-  
-  // Estado para mensajes
+
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -31,6 +28,30 @@ export default function CombinedOrderStrategy() {
     { value: 'ADA/USDC', label: 'ADA/USDC', icon: '🔷' },
     { value: 'MATIC/USDC', label: 'MATIC/USDC', icon: '🟣' },
   ];
+
+  // ✅Ethereum Mainnet
+  const TOKEN_ADDRESSES = {
+    'ETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',   // WETH
+    'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    'BTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',    // WBTC
+    'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',   // USDT
+    'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',    // DAI
+    'SOL': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',   // Using WETH as fallback
+    'ADA': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',   // Using WETH as fallback
+    'MATIC': '0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0'  // MATIC
+  };
+
+ 
+const validateAndFormatAddress = (address) => {
+  try {
+    if (!address) throw new Error('Empty address');
+    if (!ethers.isAddress(address)) throw new Error('Invalid address');
+    return ethers.getAddress(address.toLowerCase());
+  } catch (error) {
+    console.error('Error validating address:', address, error);
+    throw new Error(`Invalid address: ${address}`);
+  }
+};
 
   const showMessage = (message, type = 'success') => {
     if (type === 'success') {
@@ -57,20 +78,9 @@ export default function CombinedOrderStrategy() {
       setRefreshingStrategies(true);
       console.log('Refreshing strategies for account:', account);
       
-      // Intentar diferentes endpoints si falla
-      let fetched;
-      try {
-        fetched = await fetchStrategies(account);
-        console.log('Strategies fetched successfully:', fetched);
-      } catch (firstError) {
-        console.error('First attempt failed:', firstError);
-        
-        // Si el primer intento falla, intentar con userAddress en lugar de walletAddress
-        console.log('Trying alternative endpoint...');
-        throw firstError; // Por ahora, relanzar el error original
-      }
+      const fetched = await fetchStrategies(account);
+      console.log('Strategies fetched successfully:', fetched);
       
-      // Asegurar que sea un array
       const strategiesArray = Array.isArray(fetched) ? fetched : [];
       setStrategies(strategiesArray);
       
@@ -84,22 +94,21 @@ export default function CombinedOrderStrategy() {
       console.error('Error refreshing strategies:', error);
       setStrategies([]);
       
-      // Manejar diferentes tipos de errores con más detalle
       if (error.message.includes('500')) {
         console.error('🔴 Server Error 500 - Backend issue');
         if (error.message.includes('createdAt')) {
-          showMessage('Error en la base de datos: La columna createdAt no existe. Revisa el schema de la BD.', 'error');
+          showMessage('Database error, column createdAt does not exist. check DB schema.', 'error');
         } else if (error.message.includes('Unknown column')) {
-          showMessage('Error en la base de datos: Problema con el schema. Revisa las columnas de la tabla.', 'error');
+          showMessage('Database error', 'error');
         } else {
-          showMessage('Error del servidor (500). Revisa que el backend esté funcionando correctamente.', 'error');
+          showMessage(' Server Error 500 - Backend issue', 'error');
         }
       } else if (error.message.includes('404')) {
         console.error('🔴 Not Found 404 - Endpoint doesn\'t exist');
-        showMessage('Endpoint no encontrado (404). Verifica la URL del API.', 'error');
+        showMessage('Not Found 404 - Endpoint doesn\'t exist.', 'error');
       } else if (error.message.includes('fetch')) {
         console.error('🔴 Network Error - Can\'t reach backend');
-        showMessage('Error de conexión. ¿Está el backend corriendo en puerto 4500?', 'error');
+        showMessage('Network Error - Can\'t reach backend', 'error');
       } else {
         console.error('🔴 Unknown error:', error);
         showMessage('Error: ' + error.message, 'error');
@@ -110,7 +119,6 @@ export default function CombinedOrderStrategy() {
   };
 
   useEffect(() => {
-    // Solo refrescar estrategias si la wallet está conectada
     if (isConnected && account) {
       refreshStrategies();
     } else {
@@ -120,12 +128,12 @@ export default function CombinedOrderStrategy() {
 
   const validateInputs = () => {
     if (!sellPrice.trim()) {
-      showMessage('Por favor ingresa un precio de venta', 'error');
+      showMessage('Please add a sell price', 'error');
       return false;
     }
 
     if (!amount.trim()) {
-      showMessage('Por favor ingresa una cantidad', 'error');
+      showMessage('Please add an amount', 'error');
       return false;
     }
 
@@ -133,12 +141,12 @@ export default function CombinedOrderStrategy() {
     const numAmount = parseFloat(amount);
 
     if (isNaN(numPrice) || numPrice <= 0) {
-      showMessage('El precio debe ser un número válido mayor a 0', 'error');
+      showMessage('Price must be a valid number greater than 0', 'error');
       return false;
     }
 
     if (isNaN(numAmount) || numAmount <= 0) {
-      showMessage('La cantidad debe ser un número válido mayor a 0', 'error');
+      showMessage('Amount must be a valid number greater than 0', 'error');
       return false;
     }
 
@@ -147,7 +155,7 @@ export default function CombinedOrderStrategy() {
 
   const handleCreateStrategy = async () => {
     if (!isConnected || !account) {
-      showMessage('Por favor conecta tu wallet', 'error');
+      showMessage('Please connect your wallet', 'error');
       return;
     }
 
@@ -192,85 +200,112 @@ export default function CombinedOrderStrategy() {
       console.log('Strategy creation response:', response);
       
       if (response && (response.success !== false)) {
-        showMessage('✅ Estrategia creada exitosamente', 'success');
+        showMessage('✅ Strategy created successfully!', 'success');
         
-        // Esperar un poco antes de refrescar para que el backend procese
         setTimeout(async () => {
           await refreshStrategies();
         }, 1000);
         
-        // Limpiar formulario
         setSellPrice('');
         setAmount('');
       } else {
-        const errorMessage = response?.message || response?.details || 'Error desconocido al crear estrategia';
+        const errorMessage = response?.message || response?.details || 'Error creating strategy';
         showMessage(errorMessage, 'error');
       }
     } catch (error) {
       console.error('Error creating strategy:', error);
       if (error.message.includes('500')) {
-        showMessage('Error del servidor al crear estrategia. Verifica la conexión con el backend.', 'error');
+        showMessage('Server error', 'error');
       } else {
-        showMessage('Error al crear estrategia: ' + error.message, 'error');
+        showMessage('Error creating strategy: ' + error.message, 'error');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateOrder = async (strategy) => {
-    if (!isConnected || !signer) {
-      showMessage('Wallet no conectada correctamente', 'error');
-      return;
+const handleCreateOrder = async (strategy) => {
+  if (!isConnected || !signer) {
+    showMessage('Wallet is not connected properly', 'error');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    const action = strategy.actions?.[0];
+    if (!action) {
+      throw new Error('strategy without actions');
+    }
+    
+    const [baseToken, quoteToken] = action.tokenPair.split('/');
+
+    const makerAssetRaw = TOKEN_ADDRESSES[baseToken];
+    const takerAssetRaw = TOKEN_ADDRESSES[quoteToken];
+    
+    if (!makerAssetRaw || !takerAssetRaw) {
+      throw new Error(`not supported Token: ${baseToken} o ${quoteToken}`);
     }
 
-    try {
-      setLoading(true);
+    const makerAsset = validateAndFormatAddress(makerAssetRaw);
+    const takerAsset = validateAndFormatAddress(takerAssetRaw);
+    const maker = validateAndFormatAddress(account);
 
-      const orderData = {
-        strategy_id: strategy.id,
-        price: strategy.actions?.[0]?.price || '0',
-        amount: strategy.actions?.[0]?.amount || '0',
-        pair: strategy.actions?.[0]?.tokenPair || selectedPair,
-        timestamp: Date.now(),
-        wallet: account
-      };
+    const makingAmountWei = ethers.parseEther(action.amount.toString());
+    const takingAmountWei = ethers.parseUnits(
+      (action.amount * action.price).toString(), 
+      6 
+    );
+    
+    const orderParams = {
+      makerAsset,
+      takerAsset,
+      makingAmount: makingAmountWei.toString(), 
+      takingAmount: takingAmountWei.toString(), 
+      maker
+    };
 
-      const msgToSign = JSON.stringify(orderData);
-      console.log('Signing message:', msgToSign);
+    console.log('🔨 Creting limit order with params:', orderParams);
 
-      const signature = await signer.signMessage(msgToSign);
+    // Create and sign te order
+    const signedOrder = await createAndSignLimitOrder(orderParams, signer);
+    const payload = {
+      strategy_id: strategy.id,
+      userAddress: account,
+      orderData: {
+        makerAsset,
+        takerAsset,
+        makingAmount: makingAmountWei.toString(),
+        takingAmount: takingAmountWei.toString(),
+        salt: ethers.toBigInt(ethers.hexlify(ethers.randomBytes(32))).toString(),
+        maker: account,
+        makerTraits: '0'
+      },
+      orderHash: signedOrder.orderHash,
+      signature: signedOrder.signature,
+      makerSymbol: baseToken,
+      takerSymbol: quoteToken,
+      priceAtCreation: action.price
+    };
 
-      const payload = {
-        strategy_id: strategy.id,
-        userAddress: account,
-        execution_price: strategy.actions?.[0]?.price || '0',
-        order_data: orderData,
-        order_hash: signature,
-        status: 'PENDING'
-      };
+    console.log('📤 Payload completo para el backend:', payload);
+    
+    const response = await createOrder(payload);
 
-      console.log('Creating order with payload:', payload);
-      const result = await createOrder(payload);
-      
-      if (result && result.success !== false) {
-        showMessage('✅ Orden creada y firmada exitosamente', 'success');
-      } else {
-        const errorMessage = result?.message || 'Error al crear orden';
-        showMessage(errorMessage, 'error');
-      }
-    } catch (error) {
-      console.error('Error creating order:', error);
-      if (error.code === 'ACTION_REJECTED') {
-        showMessage('Firma cancelada por el usuario', 'error');
-      } else {
-        showMessage('Error al crear orden: ' + error.message, 'error');
-      }
-    } finally {
-      setLoading(false);
+    if (!response?.success) {
+      throw new Error(response?.error || 'Error creating the order');
     }
-  };
 
+    showMessage('✅ Order creted successfully!', 'success');
+    await refreshStrategies();
+
+  } catch (error) {
+    console.error('Error creating the order:', error);
+    showMessage(`❌ ${error.message}`, 'error');
+  } finally {
+    setLoading(false);
+  }
+};
   const formatPrice = (price) => {
     const num = parseFloat(price);
     return isNaN(num) ? '0' : num.toLocaleString('en-US', { 
@@ -308,13 +343,13 @@ export default function CombinedOrderStrategy() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2">
           Strategix Trading
         </h1>
-        <p className="text-slate-400">Crea estrategias de trading automatizadas</p>
+        <p className="text-slate-400">Create your strategies</p>
       </div>
 
       {/* Connection Status */}
       {!isConnected && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center">
-          <p className="text-amber-300">⚠️ Conecta tu wallet para comenzar a crear estrategias</p>
+          <p className="text-amber-300">⚠️ Connect your wallet to start creating strategies!</p>
         </div>
       )}
 
@@ -332,23 +367,22 @@ export default function CombinedOrderStrategy() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* CREAR ESTRATEGIA */}
         <div className="bg-slate-800/80 backdrop-blur-sm p-6 rounded-2xl border border-slate-600/30 shadow-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center">
               <span className="text-lg">📈</span>
             </div>
-            <h2 className="text-xl font-semibold text-cyan-300">Crear Nueva Estrategia</h2>
+            <h2 className="text-xl font-semibold text-cyan-300">Create New Strategy</h2>
           </div>
           
           <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Par de Trading</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Trading Pair</label>
               <Select
                 value={selectedPair}
                 onChange={setSelectedPair}
                 options={pairs}
-                placeholder="Selecciona un par"
+                placeholder="Select a pair"
                 className="w-full"
               />
             </div>
@@ -356,7 +390,7 @@ export default function CombinedOrderStrategy() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Input
-                  label="Precio de Venta (USD)"
+                  label="Sell Price (USD)"
                   value={sellPrice}
                   onChange={(e) => setSellPrice(e.target.value)}
                   placeholder="3200.00"
@@ -365,7 +399,7 @@ export default function CombinedOrderStrategy() {
               </div>
               <div>
                 <Input
-                  label="Cantidad"
+                  label="Amount"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="1.0"
@@ -376,7 +410,7 @@ export default function CombinedOrderStrategy() {
 
             {sellPrice && amount && (
               <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600/50">
-                <p className="text-xs text-slate-400 mb-1">Total estimado:</p>
+                <p className="text-xs text-slate-400 mb-1">Estimated total:</p>
                 <p className="text-lg font-semibold text-cyan-300">
                   {formatPrice((parseFloat(sellPrice.replace(/[$,]/g, '')) || 0) * (parseFloat(amount) || 0))}
                 </p>
@@ -391,23 +425,22 @@ export default function CombinedOrderStrategy() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creando...
+                  Creating...
                 </span>
               ) : (
-                '🚀 Crear Estrategia'
+                '🚀 Create strategy'
               )}
             </Button>
           </div>
         </div>
 
-        {/* ESTRATEGIAS EXISTENTES */}
         <div className="bg-slate-800/80 backdrop-blur-sm p-6 rounded-2xl border border-slate-600/30 shadow-2xl">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
                 <span className="text-lg">📊</span>
               </div>
-              <h2 className="text-xl font-semibold text-purple-300">Mis Estrategias</h2>
+              <h2 className="text-xl font-semibold text-purple-300">My Strategies</h2>
             </div>
             
             <button
@@ -426,20 +459,20 @@ export default function CombinedOrderStrategy() {
                 <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">🔌</span>
                 </div>
-                <p className="text-slate-400">Conecta tu wallet para ver tus estrategias</p>
+                <p className="text-slate-400">Connect your wallet to see your strategies</p>
               </div>
             ) : refreshingStrategies ? (
               <div className="text-center py-8">
                 <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-slate-400">Cargando estrategias...</p>
+                <p className="text-slate-400">Loading strategies...</p>
               </div>
             ) : strategies.length === 0 ? (
               <div className="text-center py-8">
                 <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">📋</span>
                 </div>
-                <p className="text-slate-400 mb-2">No tienes estrategias creadas aún</p>
-                <p className="text-slate-500 text-sm">Crea tu primera estrategia para comenzar</p>
+                <p className="text-slate-400 mb-2">You dont have any strategy yet</p>
+                <p className="text-slate-500 text-sm">Create your first strategy to start</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -462,12 +495,12 @@ export default function CombinedOrderStrategy() {
                         
                         <div className="text-xs text-slate-400 space-y-1">
                           {strategy.conditions?.[0] && (
-                            <p>📊 Condición: Precio {strategy.conditions[0].operator || '>='} {formatPrice(strategy.conditions[0].value)}</p>
+                            <p>📊 Condition: Price {strategy.conditions[0].operator || '>='} {formatPrice(strategy.conditions[0].value)}</p>
                           )}
                           {strategy.actions?.[0] && (
-                            <p>💰 Cantidad: {strategy.actions[0].amount || 'N/A'} {strategy.actions[0].tokenPair?.split('/')[0] || 'tokens'}</p>
+                            <p>💰 Amount: {strategy.actions[0].amount || 'N/A'} {strategy.actions[0].tokenPair?.split('/')[0] || 'tokens'}</p>
                           )}
-                          <p>🕒 Creada: {strategy.createdAt ? new Date(strategy.createdAt).toLocaleDateString() : 'N/A'}</p>
+                          <p>🕒 Created: {strategy.createdAt ? new Date(strategy.createdAt).toLocaleDateString() : 'N/A'}</p>
                         </div>
                       </div>
                     </div>
@@ -479,7 +512,7 @@ export default function CombinedOrderStrategy() {
                         disabled={loading || strategy.status !== 'active'}
                         className="flex-1 bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 border-purple-500/30 disabled:opacity-50"
                       >
-                        {loading ? '⏳' : '📋'} Emitir Orden
+                        {loading ? '⏳' : '📋'} Create Order
                       </Button>
                     </div>
                   </div>

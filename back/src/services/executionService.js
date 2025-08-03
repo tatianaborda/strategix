@@ -19,10 +19,10 @@ class ExecutionService {
     console.log('Strategy Execution Engine Started');
     this.isRunning = true;
     
-    // Ejecutar cada 30 segundos
-    cron.schedule('*/30 * * * * *', () => {
-      this.executeStrategies();
-    });
+    //  Ejecutar cada 30 segundos
+    // cron.schedule('*/30 * * * * *', () => {
+    //   this.executeStrategies();
+    // }); 
 
     // Cargar estrategias activas al inicio
     this.loadActiveStrategies();
@@ -109,98 +109,40 @@ class ExecutionService {
     }
   }
 
-  async processLimitOrder(strategy) {
+  async processLimitOrder(strategy, executionPrice) {
     try {
-      const { conditions, actions } = strategy;
-      
-      // Obtener precio actual para verificar condiciones
-      let currentPrice = null;
-      if (conditions.targetPrice && actions.makerToken && actions.takerToken) {
-        try {
-          currentPrice = await priceService.getPrice(actions.makerToken, actions.takerToken);
-        } catch (priceError) {
-          console.log(`No se pudo obtener precio para strategy ${strategy.id}, continuando...`);
-        }
+      console.log('Processing strategy:', strategy.name);
+
+      // Create order
+      const result = await createLimitOrder(strategy);
+      if (!result || !result.order) {
+        console.error('⚠️can not create the order');
+        return null;
       }
 
-      // Verificar condiciones de precio si están definidas
-      if (currentPrice && conditions.targetPrice && conditions.operator) {
-        const shouldExecute = this.checkPriceCondition(currentPrice, conditions.targetPrice, conditions.operator);
-        if (!shouldExecute) {
-          console.log(`Condiciones de precio no cumplidas para strategy ${strategy.id}: ${currentPrice} ${conditions.operator} ${conditions.targetPrice}`);
-          return;
-        }
-      }
+      const { order, orderHash } = result;
 
-      console.log(`Executing Limit Order for strategy ${strategy.id}`);
-      
+      const { signature } = await signOrder(order);
 
-      const orderResult = await createLimitOrder(strategy);
-      
-      if (orderResult) {
-        const { order, signature } = orderResult;
-        
-        // Si autoExecute está habilitado, ejecutar inmediatamente
-        if (strategy.autoExecute !== false) {
-          const executionResult = await executeOrderOnChain(order, signature);
-          
-          if (executionResult.success) {
-            console.log(`Strategy ${strategy.id} executed onchain: ${executionResult.txHash}`);
-            
-            // Actualizar orden con hash de transacción
-            await Order.update(
-              { 
-                status: 'executed',
-                tx_hash: executionResult.txHash,
-                executed_at: new Date()
-              },
-              { 
-                where: { 
-                  strategy_id: strategy.id,
-                  status: 'pending'
-                }
-              }
-            );
+      // Save order
+      const saved = await this.saveOrder(
+        strategy.id,
+        order,
+        'PENDING',
+        executionPrice,
+        null,
+        orderHash,
+        signature
+      );
 
-            // Marcar estrategia como completada si es LIMIT_ORDER
-            if (strategy.type === 'LIMIT_ORDER') {
-              await Strategy.update(
-                { 
-                  status: 'completed',
-                  completedAt: new Date()
-                },
-                { where: { id: strategy.id } }
-              );
-              this.activeStrategies.delete(strategy.id.toString());
-            }
-          } else {
-            console.error(`Execution failed for strategy ${strategy.id}:`, executionResult.error);
-            
-            // Marcar orden como fallida
-            await Order.update(
-              { 
-                status: 'failed',
-                error_message: executionResult.error
-              },
-              { 
-                where: { 
-                  strategy_id: strategy.id,
-                  status: 'pending'
-                }
-              }
-            );
-          }
-        }
-      } else {
-        console.log(`⏸️ Strategy ${strategy.id} conditions not met, skipping execution`);
-      }
+      return saved;
     } catch (error) {
-      console.error(`Error executing limit order for strategy ${strategy.id}:`, error);
-      await this.saveOrder(strategy.id, null, 'failed', null, error.message);
+      console.error(`❌ Error executing order for this strategy ${strategy.id}:`, error.message);
+      return null;
     }
   }
 
-  //Procesar estrategia TWAP
+  //Process strategy TWAP
   async processTWAP(strategy) {
     try {
       const { conditions, actions } = strategy;
@@ -237,13 +179,13 @@ class ExecutionService {
             if (executionResult.success) {
               console.log(`TWAP interval ${currentInterval} executed: ${executionResult.txHash}`);
               
-              // Actualizar estrategia
+              // Update strategy
               await Strategy.update({
                 executedIntervals: currentInterval,
                 lastExecuted: new Date()
               }, { where: { id: strategy.id } });
               
-              // Actualizar orden
+              // Update order
               await Order.update(
                 { 
                   status: 'executed',
@@ -268,15 +210,15 @@ class ExecutionService {
     }
   }
 
-  // Procesar estrategia DCA
+  // Process strategy DCA
   async processDCA(strategy) {
     try {
       const { conditions } = strategy;
       const now = Date.now();
       const lastExecution = strategy.lastExecuted ? new Date(strategy.lastExecuted).getTime() : new Date(strategy.createdAt).getTime();
       
-      // Verificar si ha pasado el intervalo de DCA
-      const interval = conditions.interval || 86400000; // Default 24 horas
+      // Verify interval of DCA
+      const interval = conditions.interval || 86400000; // Default 24 hs
       if (now - lastExecution >= interval) {
         console.log(`Executing DCA for strategy ${strategy.id}`);
         
@@ -291,12 +233,12 @@ class ExecutionService {
             if (executionResult.success) {
               console.log(`DCA executed: ${executionResult.txHash}`);
               
-              // Actualizar timestamp
+              // Update timestamp
               await Strategy.update({
                 lastExecuted: new Date()
               }, { where: { id: strategy.id } });
               
-              // Actualizar orden
+              // Update order
               await Order.update(
                 { 
                   status: 'executed',
@@ -321,7 +263,7 @@ class ExecutionService {
     }
   }
 
-  // Procesar estrategia Grid Trading
+  // Process strategy Grid Trading
   async processGrid(strategy) {
     try {
       console.log(`Processing Grid strategy ${strategy.id} - Coming soon...`);
@@ -331,7 +273,7 @@ class ExecutionService {
     }
   }
 
-  // Procesar Options
+  // Process Options
   async processOptions(strategy) {
     try {
       console.log(`Processing Options strategy ${strategy.id} - Coming soon...`);
@@ -341,7 +283,6 @@ class ExecutionService {
     }
   }
 
-  // Verificar condición de precio IMP!
   checkPriceCondition(currentPrice, targetPrice, operator) {
     switch (operator) {
       case '>':
@@ -361,39 +302,53 @@ class ExecutionService {
     }
   }
 
-  // Guardar orden usando Sequelize
-  async saveOrder(strategyId, orderData, status, executionPrice, errorMessage = null) {
+  // Save order using Sequelize
+  async saveOrder(strategyId, orderData, status, executionPrice, errorMessage = null, orderHash = null, signature = null) {
     try {
-      const order = await Order.create({
-        strategyId,
-        order_data: orderData ? JSON.stringify(orderData) : null,
+      const makerAsset = orderData.makerAsset;
+      const takerAsset = orderData.takerAsset;
+
+      const tokenInSymbol = 'WETH';   
+      const tokenOutSymbol = 'USDC';  
+
+      const savedOrder = await Order.create({
+        strategy_id: strategyId,
+        order_hash: orderHash,
+        order_data: orderData,
+        token_in: makerAsset,
+        token_in_symbol: tokenInSymbol,
+        token_out: takerAsset,
+        token_out_symbol: tokenOutSymbol,
+        amount_in: orderData.makingAmount,
+        amount_out: orderData.takingAmount,
+        price_at_creation: (Number(orderData.takingAmount) / Number(orderData.makingAmount)).toString(),
         status,
         execution_price: executionPrice,
-        error_message: errorMessage,
-        created_at: new Date()
+        error_message: errorMessage || null,
+        signature: signature || null
       });
-      
-      return order;
+
+      console.log('💾 Saved order:', savedOrder.id);
+      return savedOrder;
+
     } catch (error) {
-      console.error('Error saving order:', error);
+      console.error('❌ Error saving order in DB:', error);
+      return null;
     }
   }
 
-  // Agregar nueva estrategia al motor
+
   addStrategy(strategy) {
-    // Convertir a objeto plano si es una instancia de Sequelize para guardarlo
     const strategyData = strategy.toJSON ? strategy.toJSON() : strategy;
     this.activeStrategies.set(strategyData.id.toString(), strategyData);
     console.log(`Added strategy ${strategyData.id} to execution engine`);
   }
 
-  // Remover estrategia del motor
   removeStrategy(strategyId) {
     this.activeStrategies.delete(strategyId.toString());
     console.log(`Removed strategy ${strategyId} from execution engine`);
   }
 
-  // Actualizar estrategia en el motor
   updateStrategy(strategy) {
     const strategyData = strategy.toJSON ? strategy.toJSON() : strategy;
     if (this.activeStrategies.has(strategyData.id.toString())) {
@@ -409,7 +364,7 @@ class ExecutionService {
     console.log('Strategy Execution Engine Stopped');
   }
 
-  // Obtener estadísticas
+  // stats
   getStats() {
     return {
       activeStrategies: this.activeStrategies.size,
@@ -419,14 +374,14 @@ class ExecutionService {
     };
   }
 
-  //Recargar estrategias desde DB
+  //Reload strategies from DB
   async reloadStrategies() {
     console.log('Reloading strategies from DB...');
     this.activeStrategies.clear();
     await this.loadActiveStrategies();
   }
 
-  //Obtener estrategia en particluar
+  //get one strategy in particular
   getStrategy(strategyId) {
     return this.activeStrategies.get(strategyId.toString());
   }

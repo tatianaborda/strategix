@@ -24,10 +24,10 @@ export default function CreateOrder() {
 
   const handleCreate = async () => {
     if (!selectedStrategy || !executionPrice || !amount) {
-      return setStatus('Faltan datos');
+      return setStatus('missing data');
     }
 
-    setStatus('Firmando orden...');
+    setStatus('Signing order...');
 
     try {
       const orderPayload = {
@@ -52,50 +52,50 @@ export default function CreateOrder() {
       const response = await createOrder(finalOrder);
 
       if (response?.success) {
-        setStatus('Orden creada correctamente 🎯');
+        setStatus('Order created successfully 🎯');
         setExecutionPrice('');
         setAmount('1');
       } else {
-        setStatus('Error al crear la orden');
+        setStatus('Error creating the order');
       }
 
     } catch (err) {
       console.error(err);
-      setStatus('Error al firmar o enviar la orden');
+      setStatus('Error signing or sending the order');
     }
   };
 
   return (
     <div className="max-w-md bg-slate-800/80 border border-slate-600 p-6 rounded-xl text-white">
-      <h2 className="text-xl font-bold mb-4">Crear nueva orden</h2>
+      <h2 className="text-xl font-bold mb-4">Create new order</h2>
 
       <div className="space-y-4">
         <Select
-          label="Estrategia"
+          label="Strategy"
           value={selectedStrategy?.name}
           onChange={(name) =>
             setSelectedStrategy(strategies.find(s => s.name === name))
           }
           options={strategies.map(s => ({ value: s.name, label: s.name }))}
-          placeholder="Seleccioná una estrategia"
+          placeholder="Select a strategy"
         />
 
         <Input
-          label="Precio de ejecución"
+          label="Eecution price"
           placeholder="Ej: 3150.00"
           value={executionPrice}
           onChange={e => setExecutionPrice(e.target.value)}
         />
 
         <Input
-          label="Cantidad"
+          label="quantity"
           placeholder="Ej: 1"
           value={amount}
           onChange={e => setAmount(e.target.value)}
         />
 
         <Button onClick={handleCreate} className="w-full">
-          Crear orden
+          Create order
         </Button>
 
         {status && <p className="text-sm mt-2 text-cyan-300">{status}</p>}

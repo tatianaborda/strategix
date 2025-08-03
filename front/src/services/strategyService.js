@@ -12,7 +12,6 @@ export const fetchStrategies = async (walletAddress) => {
     console.log('Response status:', response.status, response.statusText);
     
     if (!response.ok) {
-      // Intentar obtener más detalles del error del servidor
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
         const errorData = await response.json();
@@ -45,9 +44,9 @@ export const fetchStrategies = async (walletAddress) => {
     }
     
   } catch (error) {
-    console.error('Error al obtener estrategias:', error);
+    console.error('Error:', error);
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('No se pudo conectar al servidor. ¿Está el backend corriendo?');
+      throw new Error('is server running?');
     }
     throw error;
   }
@@ -92,10 +91,10 @@ export const createStrategy = async (strategyData) => {
     
     return result.data || result;
   } catch (error) {
-    console.error('Error al crear estrategia:', error);
+    console.error('Error:', error);
     
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('No se pudo conectar al servidor para crear la estrategia');
+      throw new Error('Failed to connect to the server to create the strategy');
     }
     
     throw error;
@@ -113,7 +112,7 @@ export const testConnection = async () => {
   }
 };
 
-// Función para obtener una estrategia específica
+// Function to get a specific strategy
 export const fetchStrategyById = async (strategyId) => {
   try {
     const url = `${BASE_URL}/strategies/${strategyId}`;

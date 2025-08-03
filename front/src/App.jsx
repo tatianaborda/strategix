@@ -1,7 +1,7 @@
 import Header from './components/Header'
 import Hero from './components/Hero'
 // import LimitOrderBot from './components/LimitOrderBot'
-import CombinedOrderStrategy from './components/CombinedOrderStrategy' // Asegurate que esté en esa ruta
+import CombinedOrderStrategy from './components/CombinedOrderStrategy'
 
 export default function App() {
   return (

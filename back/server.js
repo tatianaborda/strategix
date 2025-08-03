@@ -11,21 +11,18 @@ const PORT = process.env.PORT || 4500;
 // Función para iniciar el servidor
 const startServer = async () => {
   try {
-    // Verificar conexión a base de datos
+
     await sequelize.authenticate();
     console.log('Database connection established successfully');
-    
-    // Sincronizar modelos en desarrollo
+
     if (process.env.NODE_ENV === 'development') {
       await sequelize.sync({ alter: true });
       console.log('Database models synchronized');
     }
 
-    // Iniciar servidor HTTP
     const server = app.listen(PORT, () => {
       console.log(`Strategix Backend running on port ${PORT}`);
-      
-      // Iniciar execution service después de que el servidor esté corriendo
+
       try {
         executionService.start();
         console.log('Strategy Execution Engine iniciado');
@@ -36,8 +33,7 @@ const startServer = async () => {
 
     const gracefulShutdown = (signal) => {
       console.log(`\n${signal} shutting down`);
-      
-      // Detener execution service primero
+
       try {
         if (executionService && executionService.stop) {
           executionService.stop();
@@ -60,7 +56,6 @@ const startServer = async () => {
         }
       });
 
-      // Force shutdown after 10 seconds
       setTimeout(() => {
         console.error('Forced shutdown after timeout');
         process.exit(1);
@@ -88,5 +83,4 @@ const startServer = async () => {
   }
 };
 
-// Iniciar servidor
 startServer();

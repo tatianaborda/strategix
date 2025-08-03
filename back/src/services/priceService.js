@@ -4,7 +4,6 @@ const axios = require('axios');
 const priceCache = new Map();
 const CACHE_TTL = 30000; // 30 segundos
 
-// Mapeo de símbolos a IDs de CoinGecko
 const TOKEN_MAPPING = {
   'ETH': 'ethereum',
   'BTC': 'bitcoin', 
@@ -39,12 +38,11 @@ class PriceService {
     this.lastRequestTime = Date.now();
   }
 
-  // Obtener precio actual de un token
+  // getting token price now
   async getCurrentPrice(symbol) {
     const cacheKey = `price_${symbol.toLowerCase()}`;
     const cached = priceCache.get(cacheKey);
-    
-    // Verificar cache
+
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return cached.price;
     }
@@ -74,8 +72,6 @@ class PriceService {
       if (!price) {
         throw new Error(`Price not found for ${symbol}`);
       }
-
-      // Guardar en cache
       priceCache.set(cacheKey, {
         price,
         timestamp: Date.now(),
@@ -85,8 +81,6 @@ class PriceService {
       return price;
     } catch (error) {
       console.error(`Error fetching price for ${symbol}:`, error.message);
-      
-      // Devolver precio cacheado aunque esté expirado si hay error
       if (cached) {
         console.warn(`Using stale cached price for ${symbol}`);
         return cached.price;
@@ -96,7 +90,6 @@ class PriceService {
     }
   }
 
-  // Obtener múltiples precios
   async getMultiplePrices(symbols) {
     const coinIds = symbols
       .map(symbol => TOKEN_MAPPING[symbol.toUpperCase()])
@@ -139,7 +132,7 @@ class PriceService {
     }
   }
 
-  // Obtener datos históricos para backtesting
+  // for backtesting purposes
   async getHistoricalPrice(symbol, days = 7) {
     const coinId = TOKEN_MAPPING[symbol.toUpperCase()];
     if (!coinId) {
@@ -171,7 +164,6 @@ class PriceService {
     }
   }
 
-  // Calcular si una condición de precio se cumple
   checkPriceCondition(currentPrice, condition) {
     const { operator, value } = condition;
     
@@ -192,7 +184,6 @@ class PriceService {
     }
   }
 
-  // Obtener tokens soportados
   getSupportedTokens() {
     return Object.keys(TOKEN_MAPPING).map(symbol => ({
       symbol,
@@ -200,7 +191,6 @@ class PriceService {
     }));
   }
 
-  // Limpiar cache
   clearCache() {
     priceCache.clear();
   }
