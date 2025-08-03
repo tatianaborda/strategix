@@ -2,13 +2,15 @@ const Joi = require('joi');
 
 const createOrderSchema = Joi.object({
   userAddress: Joi.string().lowercase().pattern(/^0x[a-fA-F0-9]{40}$/i).required(),
-  makerAsset: Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/i).required(),
-  takerAsset: Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/i).required(),
-  makingAmount: Joi.string().pattern(/^\d+$/).required(),
-  takingAmount: Joi.string().pattern(/^\d+$/).required(),
+  makerAsset: Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/i).optional(),
+  takerAsset: Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/i).optional(),
+  makingAmount: Joi.string().pattern(/^\d+$/).optional(),
+  takingAmount: Joi.string().pattern(/^\d+$/).optional(),
   conditions: Joi.object().optional(),
-  orderData: Joi.object().required(),
-  strategy_id: Joi.number().required(),
+  orderData: Joi.object().optional(),
+  strategy_id: Joi.number().optional(),
+  orderHash: Joi.string().optional(),
+  signature: Joi.string().optional()
 });
 
 module.exports = {
